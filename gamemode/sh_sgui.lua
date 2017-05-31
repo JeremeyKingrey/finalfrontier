@@ -1,6 +1,29 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 if SERVER then AddCSLuaFile("sh_sgui.lua") end
 
-DEBUG = false
+local sgui_debug = nil
+
+if SERVER then
+    sgui_debug = CreateConVar("sv_sgui_debug", "0", { FCVAR_ARCHIVE }, "Enable SGUI debugging for server.")
+elseif CLIENT then
+    sgui_debug = CreateClientConVar("cl_sgui_debug", "0")
+end
 
 MOUSE1 = 1
 MOUSE2 = 2
@@ -9,6 +32,20 @@ if not sgui then
     sgui = {}
     sgui._dict = {}
 else return end
+
+function sgui.IsDebug()
+    return sgui_debug:GetBool()
+end
+
+function sgui.Log(elem, msg)
+    if not sgui.IsDebug() then return end
+
+    if not msg then
+        print("[sgui] " .. elem)
+    else
+        print("[sgui@" .. elem:GetRoom():GetName() .. " #" .. elem:GetID() .. "] " .. msg)
+    end
+end
 
 local _mt = {}
 _mt.__index = _mt

@@ -1,12 +1,24 @@
--- Client Initialization
--- Includes
-
--- jit.on()
-
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
 
 include("gmtools/nwtable.lua")
 
-include("sh_teams.lua")
+include("player_class/player_ff_default.lua")
+
 include("sh_init.lua")
 include("sh_bounds.lua")
 include("sh_matrix.lua")
@@ -18,8 +30,10 @@ include("cl_door.lua")
 include("cl_room.lua")
 include("cl_ship.lua")
 include("cl_ships.lua")
+include("sh_teams.lua")
 include("cl_universe.lua")
 include("cl_scoreboard.lua")
+include("cl_skypaint.lua")
 
 WHITE = Material("vgui/white")
 CIRCLE = Material("circle.png", "smooth")
@@ -110,7 +124,15 @@ function GM:Initialize()
 end
 
 function GM:Think()
+    for _, ply in ipairs(player.GetAll()) do
+        if IsValid(ply) and ply ~= LocalPlayer() and not ply.dt then
+            ply:InstallDataTable()
+            SetupPlayerDataTables(ply)
+        end
+    end
+
     ships.Think()
+    team.Think()
 end
 
 function GM:HUDWeaponPickedUp(weapon)
@@ -121,9 +143,9 @@ end
 
 function GM:PlayerBindPress(ply, bind, pressed)
     if ply ~= LocalPlayer() then return end
-    if ply:GetNWBool("usingScreen") then
-        local screen = ply:GetNWEntity("screen")
-        if screen then
+    if ply:GetUsingScreen() then
+        local screen = ply:GetCurrentScreen()
+        if IsValid(screen) and screen.Click then
             if bind == "+attack" then
                 screen:Click(MOUSE1)
             elseif bind == "+attack2" then
@@ -133,10 +155,6 @@ function GM:PlayerBindPress(ply, bind, pressed)
     end
 end
 
---[[function GM:HUDDrawTargetID()
-    return false
-end
-
 function GM:DrawDeathNotice(x, y)
     return false
-end]]
+end

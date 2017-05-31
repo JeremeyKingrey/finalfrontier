@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 local _mt = {}
 _mt.__index = _mt
 
@@ -14,7 +31,7 @@ _mt._nwdata = nil
 _mt._valid = true
 
 function _mt:IsCurrent()
-    return self._valid and self:GetName() and IsGlobalTableCurrent(self:GetName())
+    return self._valid and self:GetName() and self._nwdata:IsCurrent()
         and self:GetBounds() and self:GetRange()
         and table.Count(self:GetRooms()) >= table.Count(self:GetRoomNames())
         and table.Count(self:GetDoors()) >= table.Count(self:GetDoorNames())
@@ -29,7 +46,11 @@ function _mt:GetName()
 end
 
 function _mt:GetObject()
-    return self._nwdata.object
+    if IsValid(self._nwdata.object) and self._nwdata.object.GetObjectType then
+        return self._nwdata.object
+    else
+        return nil
+    end
 end
 
 function _mt:GetHazardMode()
@@ -37,15 +58,12 @@ function _mt:GetHazardMode()
 end
 
 function _mt:IsObjectInRange(obj)
+    if not IsValid(obj) or not obj.GetObjectType then return false end
+    
     local ox, oy = obj:GetCoordinates()
     local sx, sy = self:GetCoordinates()
 
-    local range = self:GetRange()
-    local sensor = self:GetSystem('sensors')
-    if sensor and sensor:IsScanning() then
-        range = sensor:GetActiveScanDistance()
-    end
-    return universe:GetDistance(ox, oy, sx, sy) <= range
+    return universe:GetDistance(ox, oy, sx, sy) <= self:GetRange()
 end
 
 function _mt:GetCoordinates()
@@ -69,7 +87,9 @@ function _mt:GetVel()
 end
 
 function _mt:GetRange()
-    return self._nwdata.range
+    local sensors = self:GetSystem("sensors")
+    if not sensors then return 0.1 end
+    return sensors:GetRange()
 end
 
 function _mt:_UpdateBounds()
@@ -87,6 +107,14 @@ end
 
 function _mt:GetOrigin()
     return self._nwdata.x, self._nwdata.y
+end
+
+function _mt:GetFullName()
+    return self._nwdata.fullname or "Unnamed"
+end
+
+function _mt:GetUIColor()
+    return self._nwdata.uicolor or Color(255, 255, 255, 255)
 end
 
 function _mt:GetRoomNames()
@@ -215,7 +243,7 @@ end
 
 function _mt:Remove()
     self._valid = false
-    ForgetGlobalTable(self:GetName())
+    self._nwdata:Forget()
 
     for _, room in pairs(self:GetRooms()) do
         room:Remove()
@@ -227,13 +255,10 @@ function _mt:Remove()
 end
 
 local ply_mt = FindMetaTable("Player")
-function ply_mt:GetShipName()
-    return self:GetNWString("ship")
-end
-
 function ply_mt:GetShip()
-    if not self:GetNWString("ship") then return nil end
-    return ships.GetByName(self:GetNWString("ship"))
+    local shipname = self:GetShipName()
+    if not shipname or string.len(shipname) == 0 then return nil end
+    return ships.GetByName(shipname)
 end
 
 function Ship(name)
@@ -245,7 +270,7 @@ function Ship(name)
 
     ship._systems = {}
 
-    ship._nwdata = GetGlobalTable(name)
+    ship._nwdata = NetworkTable(name)
     ship._nwdata.name = name
 
     return setmetatable(ship, _mt)

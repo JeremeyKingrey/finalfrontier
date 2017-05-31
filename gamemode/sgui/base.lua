@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 WHITE = Material("vgui/white")
 
 if SERVER then util.AddNetworkString("Click") end
@@ -15,7 +32,7 @@ function GUI:Initialize()
 end
 
 function GUI:GetPermission()
-    return self:GetScreen().UI.Permission
+    return self:GetScreen():GetUIRoot().Permission
 end
 
 function GUI:GetRoom()
@@ -42,8 +59,8 @@ function GUI:GetSystemIcon()
 end
 
 function GUI:GetUsingPlayer()
-    if not self:GetScreen():GetNWBool("used") then return nil end
-    return self:GetScreen():GetNWEntity("user")
+    if not self:GetScreen():GetBeingUsed() then return nil end
+    return self:GetScreen():GetUsingPlayer()
 end
 
 function GUI:GetBounds() return self._bounds end
@@ -222,12 +239,11 @@ if CLIENT then
 
     function GUI:Click(x, y, button)
         if self.CanClick and self:IsPointInside(x, y) then
-if DEBUG then
-            print("click@" .. self:GetRoom():GetName() .. ":" .. self.Name .. "(" .. self:GetID() .. ")")
-end
+            sgui.Log(self, "Click")
+
             net.Start("Click")
             net.WriteEntity(self:GetScreen())
-            net.WriteFloat(self:GetScreen():GetNWFloat("layout"))
+            net.WriteFloat(self:GetScreen():GetLayout():GetLastUpdateTime())
             self:SendIDHierarchy()
             net.WriteUInt(0, 16)
             net.WriteInt(button, 8)
@@ -241,10 +257,11 @@ end
         return false
     end
 
-if DEBUG then
     function GUI:Draw()
+        if not sgui.IsDebug() then return end
+        
         local color = Color(255, 0, 0, 255)
-        if self:GetScreen():GetNWBool("used") and self:IsPointInside(self:GetCursorPos()) then
+        if self:GetScreen():GetBeingUsed() and self:IsPointInside(self:GetCursorPos()) then
             color = Color(0, 255, 0, 255)
         end
 
@@ -261,7 +278,6 @@ if DEBUG then
         surface.SetDrawColor(color)
         surface.DrawRect(self:GetGlobalRect())
     end
-end
 
     function GUI:UpdateLayout(layout)
         self._id = layout.id
@@ -306,14 +322,14 @@ if SERVER then
     net.Receive("Click", function(len, ply)
         local screen = net.ReadEntity()
         local layoutTime = net.ReadFloat()
-        if layoutTime < screen:GetNWFloat("layout") then return end
-        if screen:GetNWEntity("user") == ply then
+        if layoutTime < screen:GetLayout():GetLastUpdateTime() then return end
+        if screen:GetUsingPlayer() == ply then
             local element = nil
             while true do
                 local id = net.ReadUInt(16)
                 if element == nil then
-                    if id == screen.UI:GetID() then
-                        element = screen.UI
+                    if id == screen:GetUIRoot():GetID() then
+                        element = screen:GetUIRoot()
                     else return end
                 else
                     if id == 0 then break end
@@ -325,10 +341,9 @@ if SERVER then
             if element and element.CanClick then
                 local button = net.ReadInt(8)
                 local x, y = net.ReadFloat(), net.ReadFloat()
-if DEBUG then
-            print("click@" .. screen:GetRoom():GetName() .. ":" .. element.Name ..
-                "(" .. element:GetID() .. ")")
-end
+
+                sgui.Log(element, "Click")
+
                 if element:OnClick(x, y, button) then
                     screen:EmitSound(clickSound, 65, 100)
                 end

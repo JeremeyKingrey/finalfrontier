@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 local TEMPERATURE_TRANSMIT_RATE = 0.05
 local ATMOSPHERE_TRANSMIT_RATE = 40.0
 
@@ -11,27 +28,26 @@ ENT._lastupdate = 0
 
 ENT._nwdata = nil
 
-function ENT:Initialize()
-    self._rooms = {}
-
-    if not self._nwdata then
-        self._nwdata = {}
-        self._nwdata.roomnames = {}
-    end
-
-    self._nwdata.name = self:GetName()
-
-    self:_SetArea(4)
-end
-
 function ENT:KeyValue(key, value)
-    if not self._nwdata then self._nwdata = {} end
+    self._nwdata = self._nwdata or {}
 
     if key == "room1" then
         self:_SetRoomName(1, tostring(value))
     elseif key == "room2" then
         self:_SetRoomName(2, tostring(value))
     end
+end
+
+function ENT:Initialize()
+    self._nwdata = NetworkTable(self:GetName(), self._nwdata)
+
+    self._rooms = {}
+
+    self._nwdata.roomnames = self._nwdata.roomnames or {}
+    self._nwdata.name = self:GetName()
+    self._nwdata:Update()
+
+    self:_SetArea(4)
 end
 
 function ENT:InitPostEntity()
@@ -57,16 +73,20 @@ function ENT:InitPostEntity()
         local x, y = trans:Transform(v.x, v.y)
         self._nwdata.corners[i] = { x = x, y = y }
     end
-    self:_UpdateNWData()
+    self._nwdata:Update()
 
     self:_UpdateRooms()
 
     self:_NextUpdate()
 end
 
+function ENT:Reset()
+    self:Unlock()
+end
+
 function ENT:SetIsPowered(powered)
     self._nwdata.powered = powered
-    self:_UpdateNWData()
+    self._nwdata:Update()
 end
 
 function ENT:IsPowered()
@@ -75,7 +95,7 @@ end
 
 function ENT:_SetArea(area)
     self._nwdata.area = area
-    self:_UpdateNWData()
+    self._nwdata:Update()
 end
 
 function ENT:GetArea()
@@ -84,7 +104,7 @@ end
 
 function ENT:SetIndex(index)
     self._nwdata.index = index
-    self:_UpdateNWData()
+    self._nwdata:Update()
 end
 
 function ENT:GetIndex()
@@ -128,10 +148,10 @@ end
 function ENT:AcceptInput(name, activator, caller, data)
     if name == "Opened" then
         self._nwdata.open = true
-        self:_UpdateNWData()
+        self._nwdata:Update()
     elseif name == "Closed" then
         self._nwdata.open = false
-        self:_UpdateNWData()
+        self._nwdata:Update()
     end
 end
 
@@ -154,7 +174,7 @@ end
 function ENT:Lock()
     if self:IsUnlocked() then
         self._nwdata.locked = true
-        self:_UpdateNWData()
+        self._nwdata:Update()
         self:EmitSound("doors/door_metal_large_close2.wav", SNDLVL_STATIC, 100)
     end
 end
@@ -162,7 +182,7 @@ end
 function ENT:Unlock()
     if self:IsLocked() then
         self._nwdata.locked = false
-        self:_UpdateNWData()
+        self._nwdata:Update()
         self:EmitSound("doors/door_metal_large_open1.wav", SNDLVL_STATIC, 100)
     end
 end
@@ -248,8 +268,4 @@ end
 
 function ENT:IsUnlocked()
     return not self._nwdata.locked
-end
-
-function ENT:_UpdateNWData()
-    SetGlobalTable(self:GetName(), self._nwdata)
 end

@@ -1,11 +1,23 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 local BASE = "container"
 
 GUI.BaseName = BASE
-
-GUI.PermNoneColor = Color(127, 127, 127, 255)
-GUI.PermAccessColor = Color(45, 51, 172, 255)
-GUI.PermSystemColor = Color(51, 172, 45, 255)
-GUI.PermSecurityColor = Color(172, 45, 51, 255)
 
 GUI._player = nil
 
@@ -22,7 +34,7 @@ function GUI:Initialize()
         self._permButton.OnClick = function(btn)
             local ply = self:GetPlayer()
             local room = self:GetRoom()
-            if not ply then return false end
+            if not IsValid(ply) then return false end
             local perm = ply:GetPermission(room)
             perm = perm + 1
             if perm > permission.SECURITY then perm = permission.ACCESS end
@@ -33,7 +45,7 @@ function GUI:Initialize()
         self._adrmButton.OnClick = function(btn)
             local ply = self:GetPlayer()
             local room = self:GetRoom()
-            if not ply then return false end
+            if not IsValid(ply) then return false end
 
             if ply:GetPermission(room) <= permission.NONE then
                 ply:SetPermission(self:GetRoom(), permission.ACCESS)
@@ -63,27 +75,38 @@ function GUI:GetPlayer()
 end
 
 function GUI:SetPlayer(ply)
-    self._player = ply
-    self._permButton.Text = ply:Nick()
+    if not IsValid(ply) then
+        self._player = nil
+        self._permButton.Text = "[disconnected]"
+    else
+        self._player = ply
+        self._permButton.Text = ply:Nick()
+    end
 end
 
 if CLIENT then
     function GUI:Draw()
-        if self._player then
+        if IsValid(self._player) then
             self._adrmButton.Text = "-"
             self._permButton.CanClick = true
+            self._adrmButton.CanClick = true
             local perm = self._player:GetPermission(self:GetRoom())
             if perm >= permission.SECURITY then
-                self._permButton.Color = self.PermSecurityColor
+                self._permButton.Color = self:GetParent().PermSecurityColor
             elseif perm >= permission.SYSTEM then
-                self._permButton.Color = self.PermSystemColor
+                self._permButton.Color = self:GetParent().PermSystemColor
             elseif perm >= permission.ACCESS then
-                self._permButton.Color = self.PermAccessColor
+                self._permButton.Color = self:GetParent().PermAccessColor
             else
-                self._permButton.Color = self.PermNoneColor
+                self._permButton.Color = self:GetParent().PermNoneColor
                 self._adrmButton.Text = "+"
                 self._permButton.CanClick = false
             end
+        else
+            self._permButton.Color = self:GetParent().PermNoneColor
+            self._adrmButton.Text = "+"
+            self._permButton.CanClick = false
+            self._adrmButton.CanClick = false
         end
 
         self.Super[BASE].Draw(self)

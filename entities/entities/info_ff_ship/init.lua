@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 ENT.Type = "point"
 ENT.Base = "base_point"
 
@@ -26,8 +43,14 @@ ENT._warnLightBrushes = nil
 ENT._hazardEnd = 0
 
 function ENT:KeyValue(key, value)
+    self._nwdata = self._nwdata or {}
+
     if key == "health" then
-        self:_SetBaseHealth(tonumber(value))
+        self:_SetBaseHealth(tonumber(value), true)
+    elseif key == "name" then
+        self:_SetFullName(tostring(value), true)
+    elseif key == "color" then
+        self:_SetUIColor(tostring(value), true)
     elseif key == "mainlight" then
         self._mainLightName = tostring(value)
     elseif key == "warnlight" then
@@ -44,19 +67,14 @@ function ENT:Initialize()
     self._bounds = Bounds()
 
     self._systems = {}
-
     self._players = {}
 
-    if not self._nwdata then
-        self._nwdata = {}
-    end
+    self._nwdata = NetworkTable(self:GetName(), self._nwdata)
 
     self._nwdata.roomnames = {}
     self._nwdata.doornames = {}
 
     self._nwdata.name = self:GetName()
-    self._nwdata.range = 0.25
-    self._nwdata.scanrange = 2.0
 
     self._nwdata.hazardmode = true
 
@@ -76,14 +94,10 @@ function ENT:GetObject()
 end
 
 function ENT:IsObjectInRange(obj)
+    if not IsValid(obj) or not obj.GetCoordinates then return false end
+
     local ox, oy = obj:GetCoordinates()
     local sx, sy = self:GetCoordinates()
-
-    local range = self:GetRange()
-    local sensor = self:GetSystem('sensors')
-    if sensor and sensor:IsScanning() then
-        range = sensor:GetActiveScanDistance()
-    end
 
     return universe:GetDistance(ox, oy, sx, sy) <= self:GetRange()
 end
@@ -105,38 +119,40 @@ function ENT:GetVel()
 end
 
 function ENT:GetRange()
-    return self._nwdata.range
-end
-
-function ENT:SetRange(range)
-    self._nwdata.range = range
-    self:_UpdateNWData()
-end
-
-function ENT:GetScanRange()
-    return self._nwdata.scanrange
-end
-
-function ENT:SetScanRange(srange)
-    self._nwdata.scanrange = srange
-    self:_UpdateNWData()
+    local sensors = self:GetSystem("sensors")
+    if not sensors then return 0.1 end
+    return sensors:GetRange()
 end
 
 function ENT:InitPostEntity()
     self._nwdata.object = ents.Create("info_ff_object")
     self._nwdata.object:SetCoordinates(5 + math.random() * 0.2 - 0.1, 9 + math.random() * 0.2 - 0.1)
-    self._nwdata.object:SetRotation(38)
-    -- self._nwdata.object:SetVel(math.cos(self:GetRotationRadians()) * 0.2, -math.sin(self:GetRotationRadians()) * 0.2)
-    self._nwdata.object:SetObjectType(objtype.ship)
+    self._nwdata.object:SetObjectType(objtype.SHIP)
     self._nwdata.object:SetObjectName(self:GetName())
     self._nwdata.object:Spawn()
-    self:_UpdateNWData()
+    self._nwdata.object:SetRotation(math.random() * 360)
+    self._nwdata:Update()
 
     self._mainLights = ents.FindByName(self._mainLightName)
     self._warnLights = ents.FindByName(self._warnLightName)
     self._warnLightBrushes = ents.FindByName(self._warnLightBrushName)
 
     ships.Add(self)
+
+    self:SetHazardMode(false)
+end
+
+function ENT:Reset()
+    for _, room in ipairs(self._roomlist) do
+        room:Reset()
+    end
+
+    for _, door in ipairs(self._doors) do
+        door:Reset()
+    end
+    
+    self._nwdata.object:SetCoordinates(5 + math.random() * 0.2 - 0.1, 9 + math.random() * 0.2 - 0.1)
+    self._nwdata.object:SetRotation(math.random() * 360)
 
     self:SetHazardMode(false)
 end
@@ -154,7 +170,7 @@ function ENT:SetHazardMode(value, duration)
 
     if self._nwdata.hazardmode ~= value then
         self._nwdata.hazardmode = value
-        self:_UpdateNWData()
+        self._nwdata:Update()
 
         for _, light in pairs(self._mainLights) do
             if value then
@@ -194,15 +210,37 @@ function _mt:GetOrigin()
     return self._nwdata.x, self._nwdata.y
 end
 
-function ENT:_SetBaseHealth(health)
-    if not self._nwdata then self._nwdata = {} end
-
+function ENT:_SetBaseHealth(health, dontUpdate)
     self._nwdata.basehealth = health
-    self:_UpdateNWData()
+    if not dontUpdate then self._nwdata:Update() end
 end
 
 function ENT:GetBaseHealth()
     return self._nwdata.basehealth
+end
+
+function ENT:_SetFullName(value, dontUpdate)
+    self._nwdata.fullname = value
+    if not dontUpdate then self._nwdata:Update() end
+end
+
+function ENT:GetFullName()
+    return self._nwdata.fullname or "Unnamed"
+end
+
+function ENT:_SetUIColor(value, dontUpdate)
+    if type(value) == "string" then
+        local split = string.Split(value, " ")
+        self._nwdata.uicolor = Color(tonumber(split[1]), tonumber(split[2]), tonumber(split[3]), 255)
+    else
+        self._nwdata.uicolor = value
+    end
+
+    if not dontUpdate then self._nwdata:Update() end
+end
+
+function ENT:GetUIColor()
+    return self._nwdata.uicolor or Color(255, 255, 255, 255)
 end
 
 function ENT:AddRoom(room)
@@ -215,7 +253,7 @@ function ENT:AddRoom(room)
     room:SetIndex(#self._roomlist)
 
     self._nwdata.roomnames[room:GetIndex()] = name
-    self:_UpdateNWData()
+    self._nwdata:Update()
 end
 
 function ENT:GetRoomNames()
@@ -253,7 +291,7 @@ function ENT:AddDoor(door)
         door:SetIndex(#self._doors)
 
         self._nwdata.doornames[door:GetIndex()] = door:GetName()
-        self:_UpdateNWData()
+        self._nwdata:Update()
     end
 end
 
@@ -277,7 +315,7 @@ function ply_mt:SetShip(ship)
     end
     ship:_AddPlayer(self)
     self._ship = ship
-    self:SetNWString("ship", ship:GetName())
+    self:SetShipName(ship:GetName())
 end
 
 function ply_mt:GetShip()
@@ -296,10 +334,18 @@ function ENT:_RemovePlayer(ply)
     end
 end
 
-function ENT:IsPointInside(x, y)
-    return self:GetBounds():IsPointInside(x, y)
+function ENT:GetPlayers()
+    local i = #self._players
+    while i > 0 do
+        if not IsValid(self._players[i]) then
+            table.remove(self._players, i)
+        end
+        i = i - 1
+    end
+
+    return self._players
 end
 
-function ENT:_UpdateNWData()
-    SetGlobalTable(self:GetName(), self._nwdata)
+function ENT:IsPointInside(x, y)
+    return self:GetBounds():IsPointInside(x, y)
 end

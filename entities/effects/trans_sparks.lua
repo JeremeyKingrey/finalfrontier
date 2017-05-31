@@ -1,13 +1,29 @@
-function EFFECT:Init(data)
-    local target = data:GetEntity()
-    if not IsValid(target) then return end
-    
-    local offset = data:GetOrigin()
-    local low, high = target:WorldSpaceAABB()
-    low = low - target:GetPos() + offset
-    high = high - target:GetPos() + offset
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
 
-    local count = math.Clamp(target:BoundingRadius() * 4, 32, 256)
+function EFFECT:Init(data)    
+    local low = data:GetOrigin()
+    local high = data:GetStart()
+
+    local offset = (low + high) / 2
+
+    local size = high - low
+
+    local count = math.Clamp(size.x * size.y * size.z / 256, 32, 128)
         
     local emitter = ParticleEmitter(offset)
     for i = 1, count do

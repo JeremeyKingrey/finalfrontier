@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 local BASE = "page"
 
 GUI.BaseName = BASE
@@ -17,12 +34,19 @@ function GUI:Enter()
     self._grid:SetOrigin(8, 8)
     self._grid:SetSize(self:GetWidth() * 0.6 - 16, self:GetHeight() - 16)
     self._grid:SetCentreObject(nil)
-    self._grid:SetScale(self._grid:GetMinScale())
+    self._grid:SetInitialScale(self._grid:GetMinScale())
 
     if SERVER then
         function self._grid.OnClick(grid, x, y, button)
-            x, y = grid:ScreenToCoordinate(x - grid:GetLeft(), y - grid:GetTop())
-            self:GetSystem():SetTargetCoordinates(x, y, button == MOUSE2)
+            if button == MOUSE1 then
+                local sx, sy = self:GetShip():GetCoordinates()
+                local tx, ty = grid:ScreenToCoordinate(x - grid:GetLeft(), y - grid:GetTop())
+                local dx, dy = universe:GetDifference(sx, sy, tx, ty)
+
+                self:GetSystem():SetTargetHeading(dx, dy)
+            elseif button == MOUSE2 then
+                self:GetSystem():FullStop()
+            end
             return true
         end
     end
@@ -42,18 +66,10 @@ function GUI:Enter()
     self._zoomSlider:SetSize(colWidth, 48)
 
     if SERVER then
-        local min = self._grid:GetMinScale()
-        local max = self._grid:GetMaxScale()
-
-        self._zoomSlider.Value = self:GetScreen().Storage.ZoomSliderValue or math.sqrt((self._grid:GetScale() - min) / (max - min))
-        self:GetScreen().Storage.ZoomSliderValue = self._zoomSlider.Value
-        self._grid:SetScale(min + math.pow(self._zoomSlider.Value, 2) * (max - min))
+        self._zoomSlider.Value = self._grid:GetScaleRatio()
 
         function self._zoomSlider.OnValueChanged(slider, value)
-            min = self._grid:GetMinScale()
-            max = self._grid:GetMaxScale()
-            self._grid:SetScale(min + math.pow(value, 2) * (max - min))
-            self:GetScreen().Storage.ZoomSliderValue = value
+            self._grid:SetScaleRatio(value)
         end
     end
 

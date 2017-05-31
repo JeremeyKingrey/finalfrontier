@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 local BASE = "base"
 
 GUI.BaseName = BASE
@@ -117,6 +134,8 @@ if CLIENT then
 end
 
 if SERVER then
+    GUI._lastChildCount = 0
+
     function GUI:AllocateNewID()
         self.Super[BASE].AllocateNewID(self)
 
@@ -141,14 +160,20 @@ if SERVER then
         self.Super[BASE].UpdateLayout(self, layout)
 
         for i, child in ipairs(self:GetChildren()) do
-            if not layout[i] then layout[i] = {} end
+            if not layout[i] or layout[i].id ~= child:GetID() then
+                layout[i] = {}
+            end
+            
             child:UpdateLayout(layout[i])
         end
 
-        local i = #self:GetChildren() + 1
-        while layout[i] do
-            layout[i] = nil
-            i = i + 1
+        local childCount = #self:GetChildren()
+        if self._lastChildCount > childCount then
+            for i = childCount + 1, self._lastChildCount do
+                layout[i] = nil
+            end
         end
+
+        self._lastChildCount = childCount
     end
 end

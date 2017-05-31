@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 universe = nil
 
 ENT.Type = "point"
@@ -14,7 +31,8 @@ ENT._sectors = nil
 ENT._nwdata = nil
 
 function ENT:KeyValue(key, value)
-    if not self._nwdata then self._nwdata = {} end
+    self._nwdata = self._nwdata or {}
+
     if key == "width" then
         self._nwdata.width = tonumber(value)
     elseif key == "height" then
@@ -27,14 +45,16 @@ function ENT:KeyValue(key, value)
 end
 
 function ENT:Initialize()
+    universe = self
+    
     self._sectors = {}
 
-    if not self._nwdata then self._nwdata = {} end
+    self._nwdata = NetworkTable("universe", self._nwdata)
 
     self._nwdata.x = self:GetPos().x
     self._nwdata.y = self:GetPos().y
     self._nwdata.z = self:GetPos().z
-    self:_UpdateNWData()
+    self._nwdata:Update()
 end
 
 function ENT:GetHorizontalSectors()
@@ -111,7 +131,6 @@ function ENT:GetSector(x, y)
 end
 
 function ENT:InitPostEntity()
-    universe = self
     for x = 0, self:GetHorizontalSectors() - 1 do
         for y = 0, self:GetVerticalSectors() - 1 do
             local sector = ents.Create("info_ff_sector")
@@ -119,19 +138,6 @@ function ENT:InitPostEntity()
             sector:SetCoordinates(xi, yi)
             sector:Spawn()
             self._sectors[index] = sector
-
-            --[[local objs = math.floor(math.random() * 4) + 1
-            for i = 1, objs do
-                local obj = ents.Create("info_ff_object")
-                obj:SetCoordinates(x + math.random(), y + math.random())
-                obj:SetRotation(0)
-                obj:SetVel(math.random() - 0.5, math.random() - 0.5)
-                obj:Spawn()
-            end]]
         end
     end
-end
-
-function ENT:_UpdateNWData()
-    SetGlobalTable("universe", self._nwdata)
 end

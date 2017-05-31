@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 if SERVER then AddCSLuaFile("shared.lua") end
 
 local SCREEN_DRAWSCALE = 16
@@ -16,11 +33,29 @@ ENT.Base = "base_anim"
 ENT._ship = nil
 ENT._room = nil
 
-ENT.Width = 0
-ENT.Height = 0
+ENT._ui = nil
+ENT._layout = nil
 
-ENT.UI = nil
-ENT.Layout = nil
+function ENT:SetupDataTables()
+    self:NetworkVarElement("Vector", 0, "x", "AlarmCountingDown")
+    self:NetworkVarElement("Vector", 0, "y", "AlarmCountStartTime")
+    self:NetworkVarElement("Vector", 0, "z", "AlarmCountInitialTime")
+
+    self:NetworkVarElement("Vector", 1, "x", "Width")
+    self:NetworkVarElement("Vector", 1, "y", "Height")
+
+    self:NetworkVarElement("Vector", 2, "x", "CursorX")
+    self:NetworkVarElement("Vector", 2, "y", "CursorY")
+
+    self:NetworkVar("String", 0, "ShipName")
+    self:NetworkVar("String", 1, "RoomName")
+
+    self:NetworkVar("Bool", 0, "BeingUsed")
+
+    self:NetworkVar("Entity", 0, "UsingPlayer")
+
+    self._layout = self:NetworkTable(0, "Layout")
+end
 
 function ENT:GetShip()
     return self._ship
@@ -30,12 +65,20 @@ function ENT:GetRoom()
     return self._room
 end
 
+function ENT:GetLayout()
+    return self._layout
+end
+
+function ENT:GetUIRoot()
+    return self._ui
+end
+
 function ENT:IsAlarmCountingDown()
-    return self:GetNWBool("alcntactive", false)
+    return self:GetAlarmCountingDown() ~= 0
 end
 
 function ENT:GetAlarmCounter()
-    return math.max(0, self:GetNWFloat("alcntinit", 0) - CurTime() + self:GetNWFloat("alcntstart", 0))
+    return math.max(0, self:GetAlarmCountInitialTime() - CurTime() + self:GetAlarmCountStartTime())
 end
 
 function ENT:GetFormattedAlarmCounter()
@@ -75,17 +118,14 @@ if SERVER then
         if key == "room" then
             self._roomName = tostring(value)
         elseif key == "width" then
-            self:SetNWFloat("width", tonumber(value))
-            self.Width = self:GetNWFloat("width") * SCREEN_DRAWSCALE
+            self:SetWidth(tonumber(value) * SCREEN_DRAWSCALE)
         elseif key == "height" then
-            self:SetNWFloat("height", tonumber(value))
-            self.Height = self:GetNWFloat("height") * SCREEN_DRAWSCALE
+            self:SetHeight(tonumber(value) * SCREEN_DRAWSCALE)
         end
     end
     
     function ENT:Initialize()
         self:DrawShadow(false)
-        self.Storage = {}
     end
 
     function ENT:InitPostEntity()
@@ -103,18 +143,18 @@ if SERVER then
             return
         end
 
-        self:SetNWString("ship", self._room:GetShipName())
-        self:SetNWString("room", self._roomName)
-        self:SetNWBool("used", false)
-        self:SetNWEntity("user", nil)
+        self:SetShipName(self._room:GetShipName())
+        self:SetRoomName(self._roomName)
+        self:SetBeingUsed(false)
+        self:SetUsingPlayer(nil)
 
         self:GenerateOverrideSequence()
-        --self:ShuffleCurrentOverrideSequence()
+        self:ShuffleCurrentOverrideSequence()
 
         self.FreeGUIIDs = {}
 
-        self.UI = sgui.Create(self, MAIN_GUI_CLASS)
-        self.UI:AllocateNewID()
+        self._ui = sgui.Create(self, MAIN_GUI_CLASS)
+        self._ui:AllocateNewID()
         self:UpdateLayout()
     end
 
@@ -242,54 +282,57 @@ if SERVER then
         end
     end
 
-    function ENT:StartAlarmCountdown()
-        if self:GetNWFloat("alcntinit", 0) > 0 then return end
+    function ENT:SetIsAlarmCountingDown(val)
+        self:SetAlarmCountingDown(val and 1 or 0)
+    end
 
-        self:SetNWBool("alcntactive", true)
-        self:SetNWFloat("alcntstart", CurTime())
-        self:SetNWFloat("alcntinit", ALARM_TIME)
+    function ENT:StartAlarmCountdown()
+        if self:GetAlarmCountInitialTime() > 0 then return end
+
+        self:SetIsAlarmCountingDown(true)
+        self:SetAlarmCountStartTime(CurTime())
+        self:SetAlarmCountInitialTime(ALARM_TIME)
     end
 
     function ENT:StopAlarmCountdown()
-        self:SetNWBool("alcntactive", false)
-        self:SetNWFloat("alcntstart", 0)
-        self:SetNWFloat("alcntinit", 0)
+        self:SetIsAlarmCountingDown(false)
+        self:SetAlarmCountStartTime(0)
+        self:SetAlarmCountInitialTime(0)
     end
 
     function ENT:PauseAlarmCountdown()
-        self:SetNWFloat("alcntinit", self:GetAlarmCounter())
-        if self:GetNWFloat("alcntinit", 0) <= 0 then 
+        self:SetAlarmCountInitialTime(self:GetAlarmCounter())
+        if self:GetAlarmCountInitialTime() <= 0 then 
             self:StopAlarmCountdown()
             return
         end
-        self:SetNWBool("alcntactive", false)
-        self:SetNWFloat("alcntstart", 0)
+        self:SetIsAlarmCountingDown(false)
+        self:SetAlarmCountStartTime(0)
     end
 
     function ENT:UnpauseAlarmCountdown()
-        if self:GetNWFloat("alcntinit", 0) <= 0 then return end
-        if self:GetNWBool("alcntactive", false) then return end
+        if self:GetAlarmCountInitialTime() <= 0 then return end
+        if self:IsAlarmCountingDown() then return end
 
-        self:SetNWBool("alcntactive", true)
-        self:SetNWFloat("alcntstart", CurTime())
+        self:SetIsAlarmCountingDown(true)
+        self:SetAlarmCountStartTime(CurTime())
     end
 
     function ENT:UpdateLayout()
-        if not self.UI then return end
-        if not self.Layout then self.Layout = {} end
+        if not self._ui then return end
 
-        self.UI:UpdateLayout(self.Layout)
-        self:SetNWTable("layout", self.Layout)
+        self._ui:UpdateLayout(self._layout)
+        self._layout:Update()
     end
 
     function ENT:Think()
-        if self:GetNWBool("used") then
+        if self:GetBeingUsed() then
             if self:IsAlarmCountingDown() and self:GetAlarmCounter() <= 0 then
                 self:GetShip():SetHazardMode(true, 10)
                 self:StopAlarmCountdown()
             end
 
-            local ply = self:GetNWEntity("user")
+            local ply = self:GetUsingPlayer()
             if not ply:IsValid() or not ply:Alive() or self:GetPos():Distance(ply:EyePos()) > MAX_USE_DISTANCE
                 or self:GetAngles():Forward():Dot(ply:GetAimVector()) >= 0 then
                 self:StopUsing()
@@ -299,22 +342,24 @@ if SERVER then
     
     function ENT:Use(activator, caller)
         if activator:IsPlayer() then
-            if not self:GetNWBool("used") and self:GetPos():Distance(activator:EyePos()) <= MAX_USE_DISTANCE then
+            if not self:GetBeingUsed() and self:GetPos():Distance(activator:EyePos()) <= MAX_USE_DISTANCE then
                 self:StartUsing(activator)
-            elseif self:GetNWEntity("user") == activator then
+            elseif self:GetUsingPlayer() == activator then
                 self:StopUsing()
             end
         end
     end
     
     function ENT:StartUsing(ply)
-        if self:GetNWBool("used", false) then return end
+        if self:GetBeingUsed() then return end
+        if not IsValid(ply) then return end
 
-        self:SetNWBool("used", true)
-        self:SetNWEntity("user", ply)
-        ply:SetNWBool("usingScreen", true)
-        ply:SetNWEntity("screen", self)
-        ply:SetNWEntity("oldWep", ply:GetActiveWeapon())
+        self:SetBeingUsed(true)
+        self:SetUsingPlayer(ply)
+
+        ply:SetUsingScreen(true)
+        ply:SetCurrentScreen(self)
+        ply:SetOldWeapon(ply:GetActiveWeapon())
         
         ply:SetWalkSpeed(50)
         ply:SetCanWalk(false)
@@ -322,7 +367,13 @@ if SERVER then
         ply:Give("weapon_ff_unarmed")
         ply:SelectWeapon("weapon_ff_unarmed")
 
-        self.UI.Permission = ply:GetPermission(self._room)
+        if not self._room:HasPlayerWithSecurityPermission() then
+            self._ui.Permission = permission.SECURITY
+        else
+            self._ui.Permission = ply:GetPermission(self._room)
+        end
+
+        self._ui:UpdatePermissions()
 
         if (self._lastPage == page.SECURITY and not ply:HasPermission(self._room, permission.SECURITY))
             or (self._lastPage == page.SYSTEM and not ply:HasPermission(self._room, permission.SYSTEM)) then
@@ -333,7 +384,7 @@ if SERVER then
             self:StopAlarmCountdown()
         end
 
-        self.UI:SetCurrentPageIndex(self._lastPage)
+        self._ui:SetCurrentPageIndex(self._lastPage)
         self:UpdateLayout()
 
         if self._room:HasSystem() then
@@ -344,27 +395,27 @@ if SERVER then
     end
     
     function ENT:StopUsing()
-        if not self:GetNWBool("used", false) then return end
+        if not self:GetBeingUsed() then return end
 
-        self:SetNWBool("used", false)
+        self:SetBeingUsed(false)
         
-        local ply = self:GetNWEntity("user")
-        if ply:IsValid() then
-            ply:SetNWBool("usingScreen", false)
-            local oldWep = ply:GetNWEntity("oldWep")
-            
-            ply:StripWeapon("weapon_ff_unarmed")
+        local ply = self:GetUsingPlayer()
+        if IsValid(ply) then
+            ply:SetUsingScreen(false)
+            local oldWep = ply:GetOldWeapon()
             if oldWep and oldWep:IsValid() then
                 ply:SetActiveWeapon(oldWep)
             end
+            
+            ply:StripWeapon("weapon_ff_unarmed")
             
             ply:SetWalkSpeed(175)
             ply:SetCanWalk(true)
             ply:CrosshairEnable()
         end
 
-        self._lastPage = self.UI:GetCurrentPageIndex()
-        self.UI:SetCurrentPageIndex(page.STATUS)
+        self._lastPage = self._ui:GetCurrentPageIndex()
+        self._ui:SetCurrentPageIndex(page.STATUS)
         self:UpdateLayout()
 
         if self._room:HasSystem() then
@@ -375,20 +426,20 @@ if SERVER then
     end
 
     function ENT:GetCursorPos()
-        return self:GetNWFloat("curx"), self:GetNWFloat("cury")
+        return self:GetCursorX(), self:GetCursorY()
     end
 
     function ENT:Click(button)
-        if self.UI then
-            self.UI:Click(self:GetCursorPos())
+        if self._ui then
+            self._ui:Click(self:GetCursorPos())
         end
     end
 
     net.Receive("CursorPos", function(len, ply)
         local screen = net.ReadEntity()
-        if screen:GetNWEntity("user") == ply then
-            screen:SetNWFloat("curx", net.ReadFloat())
-            screen:SetNWFloat("cury", net.ReadFloat())
+        if screen:GetUsingPlayer() == ply then
+            screen:SetCursorX(net.ReadFloat())
+            screen:SetCursorY(net.ReadFloat())
         end
     end)
 elseif CLIENT then
@@ -402,23 +453,16 @@ elseif CLIENT then
     ENT._nextCursorx = 0
     ENT._nextCursory = 0
     
-    function ENT:UpdateLayout()
-        if not self.Layout and self._room and self._room:IsCurrent() and self._ship == LocalPlayer():GetShip() then
-            self.Layout = self:GetNWTable("layout")
-        elseif self.UI and self._ship and self._room and self._ship ~= LocalPlayer():GetShip() then
-            self.Layout = nil
-            self:ForgetNWTable("layout")
+    function ENT:UpdateLayout()        
+        if not self._layout:IsCurrent() then return end
+        if not self._ship or not self._ship:IsCurrent() then return end
+        if not self._room or not self._room:IsCurrent() then return end
+
+        if not self._ui then
+            self._ui = sgui.Create(self, MAIN_GUI_CLASS)
         end
 
-        if not self.UI and self.Layout and self:IsNWTableCurrent("layout") then
-            self.UI = sgui.Create(self, MAIN_GUI_CLASS)
-        elseif self.UI and not self.Layout then
-            self.UI = nil
-        end
-
-        if self.Layout and self.UI and table.Count(self.Layout) > 0 then
-            self.UI:UpdateLayout(self.Layout)
-        end
+        self._ui:UpdateLayout(self._layout)
     end
 
     function ENT:Think()
@@ -427,22 +471,19 @@ elseif CLIENT then
             self._room = nil
         end
 
-        if not self._ship and self:GetNWString("ship") then
-            self._ship = ships.GetByName(self:GetNWString("ship"))
+        if not self._ship and self:GetShipName() and string.len(self:GetShipName()) > 0 then
+            self._ship = ships.GetByName(self:GetShipName())
         end
 
-        if not self._room and self._ship and self:GetNWString("room") then
-            self._room = self._ship:GetRoomByName(self:GetNWString("room"))
+        if not self._room and self._ship and self:GetRoomName() and string.len(self:GetRoomName()) > 0 then
+            self._room = self._ship:GetRoomByName(self:GetRoomName())
         end
-        
-        self.Width = self:GetNWFloat("width") * SCREEN_DRAWSCALE
-        self.Height = self:GetNWFloat("height") * SCREEN_DRAWSCALE
 
         self:UpdateLayout()
         
-        if not self._using and self:GetNWBool("used") and self:GetNWEntity("user") == LocalPlayer() then
+        if not self._using and self:GetBeingUsed() and self:GetUsingPlayer() == LocalPlayer() then
             self._using = true
-        elseif self._using and (not self:GetNWBool("used") or self:GetNWEntity("user") ~= LocalPlayer()) then
+        elseif self._using and (not self:GetBeingUsed() or self:GetUsingPlayer() ~= LocalPlayer()) then
             self._using = false
         end
     end
@@ -479,8 +520,7 @@ elseif CLIENT then
                 self._lastCursorUpdate = curTime
             end
         else
-            local cx = self:GetNWFloat("curx")
-            local cy = self:GetNWFloat("cury")
+            local cx, cy = self:GetCursorPos()
             
             if cx ~= self._lastCursorx or cy ~= self._lastCursory then
                 local t = (CurTime() - self._lastCursorUpdate) / CURSOR_UPDATE_FREQ
@@ -502,8 +542,8 @@ elseif CLIENT then
     end
     
     function ENT:DrawCursor()
-        local halfwidth = self.Width * 0.5
-        local halfheight = self.Height * 0.5
+        local halfwidth = self:GetWidth() * 0.5
+        local halfheight = self:GetHeight() * 0.5
         
         local boxSize = SCREEN_DRAWSCALE
         
@@ -529,10 +569,10 @@ elseif CLIENT then
         draw.NoTexture()
         
         cam.Start3D2D(self:GetPos(), ang, 1 / SCREEN_DRAWSCALE)
-        if self.UI then
-            self.UI:Draw()
+        if self._ui then
+            self._ui:Draw()
         end
-        if self:GetNWBool("used") then
+        if self:GetBeingUsed() then
             self:FindCursorPosition()
             self:DrawCursor()
         end
@@ -540,9 +580,9 @@ elseif CLIENT then
     end
 
     function ENT:Click(button)
-        if self.UI then
+        if self._ui then
             local x, y = self:GetCursorPos()
-            self.UI:Click(x, y, button)
+            self._ui:Click(x, y, button)
         end
     end
 end

@@ -1,14 +1,37 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 WPN.MaxTier = 1
 
-WPN.MaxPower = { 1, 1 }
-WPN.MaxCharge = { 1, 1 }
-WPN.ShotCharge = { 1, 1 }
+WPN.MaxPower = 1
+WPN.MaxCharge = 1
+WPN.ShotCharge = 1
 
 WPN.Projectile = false
 
-WPN.BaseDamage = { 0, 0 }
-WPN.PierceRatio = { 0, 0 }
-WPN.ShieldMult = { 0, 0 }
+WPN.BaseDamage = 0
+WPN.PierceRatio = 0
+WPN.ShieldMult = 0
+
+WPN.PersonnelMult = 1
+
+WPN.LifeSupportModuleMult = 1
+WPN.ShieldModuleMult = 1
+WPN.PowerModuleMult = 1
 
 if CLIENT then
     WPN.FullName = "Unnamed"
@@ -17,8 +40,14 @@ end
 
 function WPN:_FindValue(values)
     if type(values) == "number" then return values end
+    if #values == 1 then return values[1] end
     if self.MaxTier == 1 then return (values[1] + values[2]) * 0.5 end
     local t = (self:GetTier() - 1) / (self.MaxTier - 1)
+
+    if #values == 3 then
+        t = math.pow(t, values[3])
+    end
+
     return values[1] + t * (values[2] - values[1])
 end
 
@@ -50,6 +79,22 @@ function WPN:GetShieldMultiplier()
     return self:_FindValue(self.ShieldMult)
 end
 
+function WPN:GetPersonnelMultiplier()
+    return self:_FindValue(self.PersonnelMult)
+end
+
+function WPN:GetLifeSupportModuleMultiplier()
+    return self:_FindValue(self.LifeSupportModuleMult)
+end
+
+function WPN:GetShieldModuleMultiplier()
+    return self:_FindValue(self.ShieldModuleMult)
+end
+
+function WPN:GetPowerModuleMultiplier()
+    return self:_FindValue(self.PowerModuleMult)
+end
+
 if SERVER then
     local shieldedSounds = {
         "weapons/physcannon/energy_disintegrate4.wav",
@@ -63,6 +108,19 @@ if SERVER then
         dmg:SetDamageType(DMG_BLAST)
         dmg:SetDamage(damage)
 
+        if target:IsPlayer() then
+            dmg:ScaleDamage(self:GetPersonnelMultiplier())
+        elseif target:GetClass() == "prop_ff_module" then
+            local t = target:GetModuleType()
+            if t == moduletype.LIFE_SUPPORT then
+                dmg:ScaleDamage(self:GetLifeSupportModuleMultiplier())
+            elseif t == moduletype.SHIELDS then
+                dmg:ScaleDamage(self:GetShieldModuleMultiplier())
+            elseif t == moduletype.SYSTEM_POWER then
+                dmg:ScaleDamage(self:GetPowerModuleMultiplier())
+            end
+        end
+
         return dmg
     end
 
@@ -70,27 +128,37 @@ if SERVER then
         return
     end
 
-    function WPN:Hit(ship, x, y)
-        local sx, sy = ship:GetCoordinates()
-        local dx, dy = universe:GetDifference(sx, sy, x, y)
-        local ang = FindAngleDifference(math.atan2(dy, dx), ship:GetRotation() * math.pi / 180)
+    function WPN:Hit(obj, x, y)
+        if obj:GetObjectType() == objtype.SHIP then
+            local ship = ships.GetByName(obj:GetObjectName())
 
-        local closest = nil
-        local closdif = 0
+            if not IsValid(ship) then return end
 
-        local sx, sy = ship:GetBounds():GetCentre()
-        for _, room in pairs(ship:GetRooms()) do
-            local rx, ry = room:GetBounds():GetCentre()
-            dx, dy = rx - sx, sy - ry
-            local rang = math.atan2(dy, dx)
-            local dif = math.abs(FindAngleDifference(rang, ang))
-            if not closest or dif < closdif + (math.random() - 0.5) * math.pi / 8 then
-                closest = room
-                closdif = dif
+            local sx, sy = ship:GetCoordinates()
+            local dx, dy = universe:GetDifference(sx, sy, x, y)
+            local ang = FindAngleDifference(ship:GetRotation() * math.pi / 180, math.atan2(dy, dx))
+
+            local closest = nil
+            local closdif = 0
+
+            local sx, sy = ship:GetBounds():GetCentre()
+            for _, room in pairs(ship:GetRooms()) do
+                local rx, ry = room:GetBounds():GetCentre()
+                dx, dy = rx - sx, sy - ry
+                local rang = math.atan2(dy, dx)
+                local dif = math.abs(FindAngleDifference(ang, rang))
+                if not closest or dif < closdif + (math.random() - 0.5) * math.pi / 8 then
+                    closest = room
+                    closdif = dif
+                end
             end
-        end
 
-        self:OnHit(closest)
+            self:OnHit(closest)
+        elseif obj:GetObjectType() == objtype.MODULE then
+            obj:Remove()
+        elseif obj:GetObjectType() == objtype.MISSILE then
+            obj:Remove()
+        end
     end
 
     function WPN:OnHit(room)

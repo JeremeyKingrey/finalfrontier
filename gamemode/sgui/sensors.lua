@@ -1,9 +1,25 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 local BASE = "page"
 
 GUI.BaseName = BASE
 
 GUI._inspected = nil
-GUI._oldScale = nil
 
 GUI._zoomLabels = nil
 GUI._zoomSlider = nil
@@ -11,6 +27,7 @@ GUI._scanPowerLabel = nil
 GUI._chargeSlider = nil
 GUI._scanPowerBar = nil
 GUI._scanButton = nil
+GUI._autoButton = nil
 GUI._selectedLabel = nil
 GUI._inspectButton = nil
 GUI._coordLabel = nil
@@ -24,7 +41,6 @@ function GUI:Inspect(obj)
     self:RemoveAllChildren()
     if obj then
         self._inspected = obj
-        self._oldScale = self._grid:GetScale()
 
         self._zoomLabels = nil
         self._zoomSlider = nil
@@ -32,6 +48,7 @@ function GUI:Inspect(obj)
         self._chargeSlider = nil
         self._scanPowerBar = nil
         self._scanButton = nil
+        self._autoButton = nil
         self._selectedLabel = nil
         self._inspectButton = nil
         self._coordLabel = nil
@@ -64,11 +81,11 @@ function GUI:Inspect(obj)
         self._grid:SetOrigin(8, 8)
         self._grid:SetSize(self:GetWidth() * 0.6 - 16, self:GetHeight() - 56)
         self._grid:SetCentreObject(nil)
-        self._grid:SetScale(math.max(self._grid:GetMinScale(), self._oldScale or self._grid:GetMinSensorScale()))
+        self._grid:SetInitialScale(self._grid:GetMinScale())
 
         if SERVER then
             function self._grid.OnClickSelectedObject(grid, obj, button)
-                if obj:GetObjectType() == objtype.ship then
+                if obj:GetObjectType() == objtype.SHIP then
                     self:Inspect(obj)
                     self:GetScreen():UpdateLayout()
                     return true
@@ -98,18 +115,10 @@ function GUI:Inspect(obj)
         self._zoomSlider:SetSize(lblPlus:GetLeft() - lblMinus:GetRight() - 16, 32)
 
         if SERVER then
-            local min = self._grid:GetMinScale()
-            local max = self._grid:GetMaxScale()
-
-            self._zoomSlider.Value = self:GetScreen().Storage.ZoomSliderValue or math.sqrt((self._grid:GetScale() - min) / (max - min))
-            self:GetScreen().Storage.ZoomSliderValue = self._zoomSlider.Value
-            self._grid:SetScale(min + math.pow(self._zoomSlider.Value, 2) * (max - min))
+            self._zoomSlider.Value = self._grid:GetScaleRatio()
 
             function self._zoomSlider.OnValueChanged(slider, value)
-                min = self._grid:GetMinScale()
-                max = self._grid:GetMaxScale()
-                self._grid:SetScale(min + math.pow(value, 2) * (max - min))
-                self:GetScreen().Storage.ZoomSliderValue = value
+                self._grid:SetScaleRatio(value)
             end
         end
 
@@ -133,8 +142,13 @@ function GUI:Inspect(obj)
 
         self._scanButton = sgui.Create(self, "button")
         self._scanButton:SetOrigin(self._grid:GetRight() + 16, self._scanPowerBar:GetBottom() + 8)
-        self._scanButton:SetSize(self:GetWidth() * 0.4 - 16, 48)
+        self._scanButton:SetSize(self:GetWidth() * 0.2 - 12, 48)
         self._scanButton.Text = "Scan"
+
+        self._autoButton = sgui.Create(self, "button")
+        self._autoButton:SetOrigin(self._scanButton:GetRight() + 8, self._scanButton:GetTop())
+        self._autoButton:SetSize(self._scanButton:GetSize())
+        self._autoButton.Text = "Auto"
 
         self._selectedLabel = sgui.Create(self, "label")
         self._selectedLabel.AlignX = TEXT_ALIGN_CENTER
@@ -151,12 +165,16 @@ function GUI:Inspect(obj)
         if SERVER then
             self._scanButton.OnClick = function(btn, button)
                 self:GetSystem():StartScan()
-                self:GetScreen():UpdateLayout()
+                return true
+            end
+
+            self._autoButton.OnClick = function(btn, button)
+                self:GetSystem():SetAutoScan(not self:GetSystem():IsAutoScan())
                 return true
             end
 
             self._inspectButton.OnClick = function(btn, button)
-                if self._grid:GetCentreObject():GetObjectType() == objtype.ship then
+                if self._grid:GetCentreObject():GetObjectType() == objtype.SHIP then
                     self:Inspect(self._grid:GetCentreObject())
                     self:GetScreen():UpdateLayout()
                     return true
@@ -197,12 +215,18 @@ elseif CLIENT then
             local obj = self._grid:GetCentreObject()
             local x, y = obj:GetCoordinates()
 
-            if obj ~= self:GetShip():GetObject() then
-                self._selectedLabel.Text = obj:GetObjectName()
+            if IsValid(obj) then
+                self._selectedLabel.Text = obj:GetDescription()
             else
-                self._selectedLabel.Text = "This Ship"
+                self._selectedLabel.Text = "No Target"
             end
             self._coordLabel.Text = "x: " .. FormatNum(x, 1, 2) .. ", y: " .. FormatNum(y, 1, 2)
+
+            if self:GetSystem():IsAutoScan() then
+                self._autoButton.Color = Color(191, 255, 191, 255)
+            else
+                self._autoButton.Color = self._scanButton.Color
+            end
 
             local dest = self:GetSystem():GetCurrentCharge() / self:GetSystem():GetMaximumCharge()
             self._chargeSlider.Value = self._chargeSlider.Value + (dest - self._chargeSlider.Value) * 0.1
@@ -238,7 +262,7 @@ elseif CLIENT then
             end
 
             self._scanButton.CanClick = self:GetSystem():CanScan()
-            self._inspectButton.CanClick = self._grid:GetCentreObject():GetObjectType() == objtype.ship
+            self._inspectButton.CanClick = self._grid:GetCentreObject():GetObjectType() == objtype.SHIP
         end
 
     end

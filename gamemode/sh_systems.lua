@@ -1,9 +1,26 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 if SERVER then AddCSLuaFile("sh_systems.lua") end
 
 permission = {}
 permission.NONE     = 0
-permission.ACCESS    = 1
-permission.SYSTEM     = 2
+permission.ACCESS   = 1
+permission.SYSTEM   = 2
 permission.SECURITY = 3
 
 if not sys then
@@ -87,7 +104,7 @@ if SERVER then
 
         if ShouldUpdate(self._nwdata.power or 0, self._power, self._needed) then
             self._nwdata.power = value
-            self:_UpdateNWData()
+            self._nwdata:Update()
         end
     end
 
@@ -100,7 +117,7 @@ if SERVER then
 
         if ShouldUpdate(self._nwdata.needed or 0, self._needed, self._power) then
             self._nwdata.needed = value
-            self:_UpdateNWData()
+            self._nwdata:Update()
         end
     end
 
@@ -116,8 +133,9 @@ if SERVER then
         return
     end
 
-    function _mt:_UpdateNWData()
-        SetGlobalTable(self._nwtablename, self._nwdata)
+    function _mt:SetNWValue(ident, value)
+        self._nwdata.misc[ident] = value
+        self._nwdata:Update()
     end
 elseif CLIENT then
     function _mt:GetPower()
@@ -129,10 +147,15 @@ elseif CLIENT then
     end
 
     function _mt:Remove()
-        ForgetGlobalTable(self._nwtablename)
+        self._nwdata:Forget()
     end
 
     _mt.Icon = Material("systems/noicon.png", "smooth")
+end
+
+function _mt:GetNWValue(ident, default)
+    if not self._nwdata.misc then return default end
+    return self._nwdata.misc[ident] or default
 end
 
 MsgN("Loading systems...")
@@ -165,14 +188,18 @@ function sys.Create(name, room)
             _nwtablename = room:GetName() .. "_sys"
         }
         setmetatable(system, sys._dict[name])
+
+        system._nwdata = NetworkTable(system._nwtablename)
+
         if SERVER then
-            system._nwdata = {}
+            system._nwdata.misc = {}
             system:SetPower(0)
-        elseif CLIENT then
-            system._nwdata = GetGlobalTable(system._nwtablename)
         end
+
         system:Initialize()
-        if SERVER then system:_UpdateNWData() end
+
+        if SERVER then system._nwdata:Update() end
+
         return system
     end
     return nil

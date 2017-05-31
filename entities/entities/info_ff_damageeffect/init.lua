@@ -1,12 +1,29 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 ENT.Type = "point"
 ENT.Base = "base_point"
 
 dmgeffect = {}
-dmgeffect.none = 0
-dmgeffect.sparks = 1
-dmgeffect.gas = 2
-dmgeffect.smoke = 4
-dmgeffect.cracks = 8
+dmgeffect.NONE = 0
+dmgeffect.SPARKS = 1
+dmgeffect.GAS = 2
+dmgeffect.SMOKE = 4
+dmgeffect.CRACKS = 8
 
 ENT._roomname = nil
 ENT._room = nil
@@ -50,7 +67,7 @@ function ENT:InitPostEntity()
 end
 
 function ENT:PlayEffect()
-    if self:GetType() == dmgeffect.sparks then
+    if self:GetType() == dmgeffect.SPARKS then
         local ed = EffectData()
         ed:SetOrigin(self:GetPos())
         ed:SetAngles(self:GetAngles())

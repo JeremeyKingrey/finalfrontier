@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 ENT.Type = "point"
 ENT.Base = "base_point"
 
@@ -26,13 +43,13 @@ function ENT:GetModuleType()
 end
 
 function ENT:IsRepairSlot()
-    return self._moduleType == moduletype.repair1
-        or self._moduleType == moduletype.repair2
+    return self._moduleType == moduletype.REPAIR_1
+        or self._moduleType == moduletype.REPAIR_2
 end
 
 function ENT:IsWeaponSlot()
-    return self._moduleType >= moduletype.weapon1
-        and self._moduleType <= moduletype.weapon3
+    return self._moduleType >= moduletype.WEAPON_1
+        and self._moduleType <= moduletype.WEAPON_3
 end
 
 function ENT:KeyValue(key, value)
@@ -60,6 +77,7 @@ end
 
 function ENT:Open()
     if not self._hatch then return end
+    self._open = true
     self._hatch:Fire("Unlock", "", 0)
     self._hatch:Fire("Open", "", 0)
     self._hatch:Fire("Lock", "", 0)
@@ -67,6 +85,7 @@ end
 
 function ENT:Close()
     if not self._hatch then return end
+    self._open = false
     self._hatch:Fire("Unlock", "", 0)
     self._hatch:Fire("Close", "", 0)
     self._hatch:Fire("Lock", "", 0)
@@ -77,7 +96,7 @@ function ENT:InitPostEntity()
         local rooms = ents.FindByName(self._roomName)
         if #rooms > 0 then
             self._room = rooms[1]
-            self._room:AddModuleSlot(self:GetPos(), self._moduleType)
+            self._room:AddModuleSlot(self)
         end
     end
 
@@ -89,8 +108,14 @@ function ENT:InitPostEntity()
     end
 end
 
+function ENT:Reset()
+    self:Close()
+end
+
 function ENT:Think()
-    if self:IsRepairSlot() then
+    if not IsValid(self._room) then return end
+
+    if self:IsRepairSlot() and self._room:GetSystem() then
         local system = self._room:GetSystem()
         if self._open and system:IsPerformingAction() then
             if self:GetModule() then
@@ -103,7 +128,7 @@ function ENT:Think()
             end
             self._open = true
             timer.Simple(0.5, function()
-                if self:GetModule() then
+                if IsValid(self:GetModule()) then
                     local sound = CreateSound(self:GetModule(), "npc/env_headcrabcanister/hiss.wav")
                     sound:PlayEx(1, 110)
                     sound:ChangeVolume(0, 1.5)

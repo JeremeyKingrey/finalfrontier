@@ -1,14 +1,80 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 if SERVER then AddCSLuaFile("sh_init.lua") end
 
 GM.Name = "Final Frontier"
 GM.Author = "Metapyziks"
-GM.Email = "N/A"
-GM.Website = "N/A"
-
-function GM:Initialize()
-end 
+GM.Email = "metapyziks@gmail.com"
+GM.Website = "https://github.com/finalfrontier"
 
 -- Global Functions
+
+function table.Where(table, pred)
+    local copy = {}
+
+    for i, v in ipairs(table) do
+        if pred(v) then table.insert(copy, v) end
+    end
+
+    return copy
+end
+
+function table.Take(table, count)
+    local copy = {}
+
+    for i, v in ipairs(table) do
+        count = count - 1
+        if count < 0 then break end
+        table.insert(copy, v)
+    end
+
+    return copy
+end
+
+function table.Min(table, selector)
+    local minScore = 0
+    local minValue = nil
+
+    for _, value in pairs(table) do
+        local score = selector(value)
+        if minValue == nil or score < minScore then
+            minScore = score
+            minValue = value
+        end
+    end
+
+    return minValue
+end
+
+function table.Max(table, selector)
+    local maxScore = 0
+    local maxValue = nil
+
+    for _, value in pairs(table) do
+        local score = selector(value)
+        if maxValue == nil or score > maxScore then
+            maxScore = score
+            maxValue = value
+        end
+    end
+
+    return maxValue
+end
 
 function math.sign(x)
     if x > 0 then return 1 end
@@ -69,7 +135,7 @@ function WrapAngle(ang, alwaysPositive)
 end
 
 function FindAngleDifference(a, b)
-    return WrapAngle(WrapAngle(a) - WrapAngle(b))
+    return WrapAngle(b - a, false)
 end
 
 -- TODO: Add check to avoid complex polys in output
@@ -135,4 +201,19 @@ function IsPointInsidePolyGroup(polys, x, y)
     end
     
     return false
+end
+
+local ply_mt = FindMetaTable("Player")
+function ply_mt:GetPermission(room)
+    return self._permissions[room:GetPermissionsName()] or permission.NONE
+end
+
+function ply_mt:HasPermission(room, perm, ignoreSecurityCheck)
+    return self:GetPermission(room) >= perm
+        or (not ignoreSecurityCheck and not room:HasPlayerWithSecurityPermission())
+end
+
+function ply_mt:HasDoorPermission(door)
+    return self:HasPermission(door:GetRooms()[1], permission.ACCESS)
+        or self:HasPermission(door:GetRooms()[2], permission.ACCESS)
 end

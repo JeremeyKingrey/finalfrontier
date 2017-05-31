@@ -1,3 +1,20 @@
+-- Copyright (c) 2014 James King [metapyziks@gmail.com]
+-- 
+-- This file is part of Final Frontier.
+-- 
+-- Final Frontier is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU Lesser General Public License as
+-- published by the Free Software Foundation, either version 3 of
+-- the License, or (at your option) any later version.
+-- 
+-- Final Frontier is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+-- GNU General Public License for more details.
+-- 
+-- You should have received a copy of the GNU Lesser General Public License
+-- along with Final Frontier. If not, see <http://www.gnu.org/licenses/>.
+
 local BASE = "container"
 
 GUI.BaseName = BASE
@@ -82,14 +99,18 @@ if CLIENT then
     end
 
     function GUI:Draw()
+        local r1 = 0
+        if self:GetSystem():IsAutoShooting(self._slot) then r1 = 1 end
+        local r0 = 1 - r1
+
         if self:GetWeaponModule() then
             if self:GetWeaponModule():CanShoot() then
-                surface.SetDrawColor(Color(191, 191, 191, 255))
+                surface.SetDrawColor(Color(191 * r0 + 255 * r1, 191, 191, 255))
             else
-                surface.SetDrawColor(Color(127, 127, 127, 255))
+                surface.SetDrawColor(Color(127 * r0 + 255 * r1, 127, 127, 255))
             end
         else
-            surface.SetDrawColor(Color(32, 32, 32, 255))
+            surface.SetDrawColor(Color(32 * r0 + 64 * r1, 32, 32, 255))
         end
         
         surface.DrawOutlinedRect(self:GetGlobalRect())
@@ -98,10 +119,10 @@ if CLIENT then
 
         if self.CanClick and self:IsCursorInside() and self:GetWeaponModule()
             and self:GetWeaponModule():CanShoot() then
-            surface.SetDrawColor(Color(255, 255, 255, 8))
+            surface.SetDrawColor(Color(255, 255 * r0 + 127 * r1, 255 * r0 + 127 * r1, 8))
             surface.DrawRect(self:GetGlobalRect())
         elseif self:GetWeaponModule() then
-            surface.SetDrawColor(Color(255, 255, 255, 4))
+            surface.SetDrawColor(Color(255, 255 * r0 + 127 * r1, 255 * r0 + 127 * r1, 4))
             surface.DrawRect(self:GetGlobalRect())
         end
     end
